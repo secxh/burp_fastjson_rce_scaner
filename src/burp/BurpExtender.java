@@ -72,7 +72,7 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
     @Override
     public String getTabCaption()
     {
-        return "Java_RCE_Checker";
+        return "JRCE_Checker";
     }
 
     @Override
@@ -95,32 +95,32 @@ public class BurpExtender extends AbstractTableModel implements IBurpExtender, I
             if(!messageIsRequest){
                 IResponseInfo analyzeResponse = helpers.analyzeResponse(messageInfo.getResponse());
                 List<String> res_headers = analyzeResponse.getHeaders();
-                String payload = collaboratorContext.generatePayload(true);
-                IRequestInfo analyzeRequest = helpers.analyzeRequest(messageInfo);
 
                 for(String header:res_headers){
                     if (header.startsWith("Content-Type:") && header.contains("application/json")){
+                        String payload = collaboratorContext.generatePayload(true);
+                        IRequestInfo analyzeRequest = helpers.analyzeRequest(messageInfo);
                         List<String> req_headers = analyzeRequest.getHeaders();
                         req_headers.set(0,req_headers.get(0).replace("GET","POST")); //replace "get" to "post"
                         for (String pl : payloads) {
                             String body1 = pl.replace("payload",payload);
                             byte[] new_Request = helpers.buildHttpMessage(req_headers, body1.getBytes());
                             //如果修改了header或者数修改了body，不能通过updateParameter，使用这个方法。
-                            callbacks.makeHttpRequest(messageInfo.getHttpService(), new_Request);
+                             IHttpRequestResponse newRequestResponse = callbacks.makeHttpRequest(messageInfo.getHttpService(), new_Request);
+
+                            collaboratorInteractions = collaboratorContext.fetchCollaboratorInteractionsFor(payload);
+                            if (collaboratorInteractions!=null && (!collaboratorInteractions.isEmpty())) {
+                                synchronized (log){
+                                    int row = log.size();
+                                    log.add(new LogEntry(analyzeRequest.getUrl(),
+                                            callbacks.saveBuffersToTempFiles(newRequestResponse),
+                                            "Fastjson RCE",
+                                            true));
+                                    fireTableRowsInserted(row,row);
+                                }
+                            }
                         }
                         break;
-                    }
-                }
-
-                collaboratorInteractions = collaboratorContext.fetchCollaboratorInteractionsFor(payload);
-                if (collaboratorInteractions!=null && (!collaboratorInteractions.isEmpty())) {
-                    synchronized (log){
-                        int row = log.size();
-                        log.add(new LogEntry(analyzeRequest.getUrl(),
-                                callbacks.saveBuffersToTempFiles(messageInfo),
-                                "Fastjson RCE",
-                                true));
-                        fireTableRowsInserted(row,row);
                     }
                 }
             }
